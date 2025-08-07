@@ -30,6 +30,22 @@ class Token(BaseModel):
     token_type: str
     user: User
 
+# Category Schemas
+class CategoryBase(BaseModel):
+    name: str
+    description: str
+
+class CategoryCreate(CategoryBase):
+    pass
+
+class Category(CategoryBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 # Product Schemas
 class ProductBase(BaseModel):
     name: str

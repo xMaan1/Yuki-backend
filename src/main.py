@@ -5,8 +5,8 @@ from typing import List
 from datetime import timedelta
 
 from .database import get_db, engine
-from .models import Base, User, Product, Order, OrderItem, UserRole
-from .schemas import UserCreate, User as UserSchema, UserLogin, Token, ProductCreate, Product as ProductSchema, OrderCreate, Order as OrderSchema
+from .models import Base, User, Product, Order, OrderItem, UserRole, Category
+from .schemas import UserCreate, User as UserSchema, UserLogin, Token, ProductCreate, Product as ProductSchema, OrderCreate, Order as OrderSchema, CategoryCreate, Category as CategorySchema
 from .auth import get_password_hash, verify_password, create_access_token, get_current_active_user, require_role, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Create database tables
@@ -195,3 +195,62 @@ def update_user_role(user_id: int, role: UserRole, current_user: User = Depends(
     user.role = role
     db.commit()
     return {"message": "User role updated"}
+
+# Category endpoints (super admin only)
+@app.get("/categories", response_model=List[CategorySchema])
+def get_categories(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    categories = db.query(Category).filter(Category.is_active == True).offset(skip).limit(limit).all()
+    return categories
+
+@app.get("/categories/{category_id}", response_model=CategorySchema)
+def get_category(category_id: int, db: Session = Depends(get_db)):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return category
+
+@app.post("/categories", response_model=CategorySchema)
+def create_category(category: CategoryCreate, current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)), db: Session = Depends(get_db)):
+    # Check if category name already exists
+    db_category = db.query(Category).filter(Category.name == category.name).first()
+    if db_category:
+        raise HTTPException(status_code=400, detail="Category name already exists")
+    
+    db_category = Category(**category.dict())
+    db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+@app.put("/categories/{category_id}", response_model=CategorySchema)
+def update_category(category_id: int, category: CategoryCreate, current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)), db: Session = Depends(get_db)):
+    db_category = db.query(Category).filter(Category.id == category_id).first()
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Check if new name conflicts with existing category
+    existing_category = db.query(Category).filter(Category.name == category.name, Category.id != category_id).first()
+    if existing_category:
+        raise HTTPException(status_code=400, detail="Category name already exists")
+    
+    for key, value in category.dict().items():
+        setattr(db_category, key, value)
+    
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+@app.delete("/categories/{category_id}")
+def delete_category(category_id: int, current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)), db: Session = Depends(get_db)):
+    db_category = db.query(Category).filter(Category.id == category_id).first()
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Check if category has associated products
+    products_count = db.query(Product).filter(Product.category_id == category_id).count()
+    if products_count > 0:
+        raise HTTPException(status_code=400, detail=f"Cannot delete category with {products_count} associated products")
+    
+    db_category.is_active = False
+    db.commit()
+    return {"message": "Category deleted"}

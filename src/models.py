@@ -27,6 +27,19 @@ class User(Base):
     # Relationships
     orders = relationship("Order", back_populates="user")
 
+class Category(Base):
+    __tablename__ = "categories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    products = relationship("Product", back_populates="category_obj")
+
 class Product(Base):
     __tablename__ = "products"
     
@@ -35,13 +48,15 @@ class Product(Base):
     description = Column(Text)
     price = Column(Float)
     image_url = Column(String)
-    category = Column(String, index=True)
+    category = Column(String, index=True)  # Keep for backward compatibility
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     stock_quantity = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    category_obj = relationship("Category", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
 
 class Order(Base):
